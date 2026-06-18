@@ -2,38 +2,64 @@ package com.serpens.checkin;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.minecraft.inventory.SimpleInventory;
+import net.minecraft.item.*;
+import net.minecraft.screen.*;
 import net.minecraft.server.command.CommandManager;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.stat.Stats;
 import net.minecraft.text.Text;
 import java.io.File;
 import java.sql.*;
 import java.time.LocalDate;
 
 public class SerpensCheckin implements ModInitializer {
-    private Connection conn;
+    public static Connection conn;
 
     @Override
     public void onInitialize() {
         try {
-            // Garante que o banco seja criado na pasta minigames na raiz do servidor
             File dbFile = new File("minigames/database.sqlite");
             conn = DriverManager.getConnection("jdbc:sqlite:" + dbFile.getAbsolutePath());
             conn.createStatement().execute("CREATE TABLE IF NOT EXISTS checkins (uuid VARCHAR(36) PRIMARY KEY, data VARCHAR(10), streak INTEGER)");
         } catch (Exception e) { e.printStackTrace(); }
 
         CommandRegistrationCallback.EVENT.register((dispatcher, reg, env) -> dispatcher.register(CommandManager.literal("checkin").executes(ctx -> {
-            String uuid = ctx.getSource().getPlayer().getUuidAsString();
-            String hoje = LocalDate.now().toString();
-            try {
-                PreparedStatement ps = conn.prepareStatement("SELECT * FROM checkins WHERE uuid = ?");
-                ps.setString(1, uuid);
-                ResultSet rs = ps.executeQuery();
-                int streak = (rs.next() && LocalDate.parse(rs.getString("data")).plusDays(1).equals(LocalDate.now())) ? rs.getInt("streak") + 1 : 1;
-                if (rs.getRow() > 0 && hoje.equals(rs.getString("data"))) return 1;
-                conn.prepareStatement("INSERT OR REPLACE INTO checkins VALUES ('" + uuid + "', '" + hoje + "', " + streak + ")").execute();
-                ctx.getSource().getPlayer().sendMessage(Text.literal("§5[Serpens] Check-in feito! Streak: " + streak), false);
-                ctx.getSource().getServer().getCommandManager().executeWithPrefix(ctx.getSource().getServer().getCommandSource(), "eco give " + ctx.getSource().getPlayer().getName().getString() + " 1000");
-            } catch (Exception e) { e.printStackTrace(); }
+            abrirGUI(ctx.getSource().getPlayer());
             return 1;
         })));
+    }
+
+    private void abrirGUI(ServerPlayerEntity p) {
+        SimpleInventory inv = new SimpleInventory(9);
+        int playTime = p.getStatHandler().getStat(Stats.PLAY_TIME);
+        
+        // isso ve se já pegou a recompensa
+        boolean pegou = false;
+        int streak = 0;
+        try {
+            PreparedStatement ps = conn.prepareStatement("SELECT data, streak FROM checkins WHERE uuid = ?");
+            ps.setString(1, p.getUuidAsString());
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                pegou = rs.getString("data").equals(LocalDate.now().toString());
+                streak = rs.getInt("streak");
+            }
+        } catch (Exception e) {}
+
+        ItemStack item;
+        if (playTime < 6000) item = criarItem(Items.RED_STAINED_GLASS_PANE, "§cEspere 5 min", "§7Jogue mais para liberar.");
+        else if (pegou) item = criarItem(Items.YELLOW_STAINED_GLASS_PANE, "§eJá resgatado", "§7Saque amanhã.");
+        else item = criarItem(Items.LIME_STAINED_GLASS_PANE, "§aClique pra sacar!", "§7Recompensa do dia " + (streak + 1));
+
+        inv.setStack(4, item);
+        p.openHandledScreen(new SimpleNamedScreenHandlerFactory((s, i, pl) -> 
+            GenericContainerScreenHandler.createGeneric9x1(s, i, inv), Text.literal("Check-in")));
+    }
+
+    private ItemStack criarItem(Item mat, String nome, String desc) {
+        ItemStack s = new ItemStack(mat);
+        s.setCustomName(Text.literal(nome));
+        return s;
     }
 }
