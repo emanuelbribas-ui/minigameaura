@@ -1,65 +1,89 @@
 package com.serpens.checkin;
 
-import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
-import net.minecraft.inventory.SimpleInventory;
-import net.minecraft.item.*;
-import net.minecraft.screen.*;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.stat.Stats;
-import net.minecraft.text.Text;
+import org.bukkit.Bukkit;
+import org.bukkit.Material;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.plugin.java.JavaPlugin;
+
 import java.io.File;
 import java.sql.*;
 import java.time.LocalDate;
 
-public class SerpensCheckin implements ModInitializer {
-    public static Connection conn;
+public class SerpensCheckin extends JavaPlugin implements CommandExecutor {
+    private Connection conn;
 
     @Override
-    public void onInitialize() {
+    public void onEnable() {
+        getLogger().info("Plugin de Check-in carregado com sucesso!");
         try {
-            File dbFile = new File("minigames/database.sqlite");
+            File pasta = new File("minigames");
+            if (!pasta.exists()) pasta.mkdirs();
+
+            File dbFile = new File(pasta, "database.sqlite");
             conn = DriverManager.getConnection("jdbc:sqlite:" + dbFile.getAbsolutePath());
             conn.createStatement().execute("CREATE TABLE IF NOT EXISTS checkins (uuid VARCHAR(36) PRIMARY KEY, data VARCHAR(10), streak INTEGER)");
-        } catch (Exception e) { e.printStackTrace(); }
-
-        CommandRegistrationCallback.EVENT.register((dispatcher, reg, env) -> dispatcher.register(CommandManager.literal("checkin").executes(ctx -> {
-            abrirGUI(ctx.getSource().getPlayer());
-            return 1;
-        })));
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        this.getCommand("checkin").setExecutor(this);
     }
 
-    private void abrirGUI(ServerPlayerEntity p) {
-        SimpleInventory inv = new SimpleInventory(9);
-        int playTime = p.getStatHandler().getStat(Stats.PLAY_TIME);
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (sender instanceof Player) {
+            Player p = (Player) sender;
+            abrirGUI(p);
+        }
+        return true;
+    }
+
+    private void abrirGUI(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 9, "check-in");
+        int segundosJogados = p.getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE) / 20; 
         
-        // isso ve se já pegou a recompensa
         boolean pegou = false;
         int streak = 0;
         try {
             PreparedStatement ps = conn.prepareStatement("SELECT data, streak FROM checkins WHERE uuid = ?");
-            ps.setString(1, p.getUuidAsString());
+            ps.setString(1, p.getUniqueId().toString());
             ResultSet rs = ps.executeQuery();
             if (rs.next()) {
                 pegou = rs.getString("data").equals(LocalDate.now().toString());
                 streak = rs.getInt("streak");
             }
-        } catch (Exception e) {}
+        } catch (Exception e) { e.printStackTrace(); }
 
         ItemStack item;
-        if (playTime < 6000) item = criarItem(Items.RED_STAINED_GLASS_PANE, "§cEspere 5 min", "§7Jogue mais para liberar.");
-        else if (pegou) item = criarItem(Items.YELLOW_STAINED_GLASS_PANE, "§eJá resgatado", "§7Saque amanhã.");
-        else item = criarItem(Items.LIME_STAINED_GLASS_PANE, "§aClique pra sacar!", "§7Recompensa do dia " + (streak + 1));
+        if (segundosJogados < 300) {
+            item = criarItem(Material.RED_STAINED_GLASS_PANE, "§cEspere 5 minutos no servidor pra poder sacar sua recompensa");
+        } else if (pegou) {
+            item = criarItem(Material.YELLOW_STAINED_GLASS_PANE, "§eVocê já resgatou sua recompensa");
+        } else {
+            item = criarItem(Material.LIME_STAINED_GLASS_PANE, "§aclique pra sacar sua recompensa!");
+        }
 
-        inv.setStack(4, item);
-        p.openHandledScreen(new SimpleNamedScreenHandlerFactory((s, i, pl) -> 
-            GenericContainerScreenHandler.createGeneric9x1(s, i, inv), Text.literal("Check-in")));
+        inv.setItem(4, item);
+        p.openInventory(inv);
     }
 
-    private ItemStack criarItem(Item mat, String nome, String desc) {
-        ItemStack s = new ItemStack(mat);
-        s.setCustomName(Text.literal(nome));
-        return s;
+    private ItemStack criarItem(Material mat, String nome) {
+        ItemStack item = new ItemStack(mat);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(nome);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    @Override
+    public void onDisable() {
+        try { if (conn != null && !conn.isClosed()) conn.close(); } catch (Exception e) { e.printStackTrace(); }
     }
 }
