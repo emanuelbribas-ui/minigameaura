@@ -17,6 +17,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -31,7 +32,7 @@ public class Checkin extends JavaPlugin implements CommandExecutor, Listener {
     private Connection conn;
     private File pastaPlugin;
     private FileConfiguration config;
-    private final String tituloMenu = "§8Check-in Diário";
+    private final String tituloMenu = "§8§l» §5§lTerminal de Recompensas §8§l«";
 
     @Override
     public void onEnable() {
@@ -70,8 +71,6 @@ public class Checkin extends JavaPlugin implements CommandExecutor, Listener {
     private void carregarConfigPadrao() {
         if (!config.contains("dia_1")) {
             config.set("dia_1", "apple 5");
-            config.set("dia_2", "cooked_beef 16");
-            config.set("dia_3", "coal 10");
             config.set("dia_31", "netherite_block 1");
             try {
                 config.save(new File(pastaPlugin, "config.yml"));
@@ -144,11 +143,25 @@ public class Checkin extends JavaPlugin implements CommandExecutor, Listener {
     }
 
     private void abrirMenuCheckin(Player p) {
-        Inventory inv = Bukkit.createInventory(null, 9, tituloMenu);
+        Inventory inv = Bukkit.createInventory(null, 54, tituloMenu);
 
-        ItemStack background = criarItem(Material.GRAY_STAINED_GLASS_PANE, "§7 ");
-        for (int i = 0; i < inv.getSize(); i++) {
-            inv.setItem(i, background);
+        ItemStack painelPreto = criarItem(Material.BLACK_STAINED_GLASS_PANE, "§7");
+        ItemStack painelRoxo = criarItem(Material.PURPLE_STAINED_GLASS_PANE, "§7");
+        ItemStack painelMagenta = criarItem(Material.MAGENTA_STAINED_GLASS_PANE, "§7");
+
+        int[] bordasPretas = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 17, 18, 26, 27, 35, 36, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53};
+        for (int slot : bordasPretas) {
+            inv.setItem(slot, painelPreto);
+        }
+
+        int[] cantosRoxos = {10, 16, 37, 43};
+        for (int slot : cantosRoxos) {
+            inv.setItem(slot, painelRoxo);
+        }
+
+        int[] detalhesMagentas = {11, 15, 19, 25, 28, 34, 38, 42};
+        for (int slot : detalhesMagentas) {
+            inv.setItem(slot, painelMagenta);
         }
 
         int segundosJogados = 300;
@@ -176,34 +189,53 @@ public class Checkin extends JavaPlugin implements CommandExecutor, Listener {
                 t.printStackTrace();
             }
         } else {
-            p.sendMessage("§cO sistema de armazenamento está offline.");
+            p.sendMessage("§cO banco de dados está inacessível.");
             return;
         }
 
-        ItemStack itemCentral;
         int proximoDia = streakAtual + 1;
         if (proximoDia > 31) proximoDia = 1;
 
+        ItemStack cabecaJogador = new ItemStack(Material.PLAYER_HEAD);
+        SkullMeta metaCabeca = (SkullMeta) cabecaJogador.getItemMeta();
+        if (metaCabeca != null) {
+            metaCabeca.setOwningPlayer(p);
+            metaCabeca.setDisplayName("§d§lSua Conta, " + p.getName());
+            List<String> loreCabeca = new ArrayList<>();
+            loreCabeca.add("§7");
+            loreCabeca.add("§5» §fDias Seguidos: §d" + streakAtual);
+            loreCabeca.add("§5» §fTempo na Sessão: §d" + (segundosJogados / 60) + "m");
+            loreCabeca.add("§7");
+            metaCabeca.setLore(loreCabeca);
+            cabecaJogador.setItemMeta(metaCabeca);
+        }
+        inv.setItem(13, cabecaJogador);
+
+        ItemStack itemCentral;
         if (segundosJogados < 300) {
             List<String> lore = new ArrayList<>();
-            lore.add("§7Você precisa jogar no mínimo §f5 minutos§7.");
-            lore.add("§7Tempo atual: §e" + (segundosJogados / 60) + "m " + (segundosJogados % 60) + "s");
-            itemCentral = criarItemComLore(Material.RED_STAINED_GLASS_PANE, "§c§lCheck-in Bloqueado", lore);
+            lore.add("§7");
+            lore.add("§cVocê precisa jogar 5 minutos.");
+            lore.add("§cVolte daqui a pouco!");
+            lore.add("§7");
+            itemCentral = criarItemComLore(Material.RED_DYE, "§c§lAcesso Negado", lore);
         } else if (jaResgatouHoje) {
             List<String> lore = new ArrayList<>();
-            lore.add("§7Você já garantiu seu prêmio diário.");
-            lore.add("§7Sua sequência atual: §b" + streakAtual + " dias");
-            lore.add("§7Retorne amanhã para o §adinha " + proximoDia + "§7!");
-            itemCentral = criarItemComLore(Material.YELLOW_STAINED_GLASS_PANE, "§e§lRecompensa Já Resgatada", lore);
+            lore.add("§7");
+            lore.add("§7Você já obteve sua recompensa diária.");
+            lore.add("§7Próximo prêmio será do §ddia " + proximoDia + "§7.");
+            lore.add("§7");
+            itemCentral = criarItemComLore(Material.YELLOW_DYE, "§e§lJá Resgatado", lore);
         } else {
             List<String> lore = new ArrayList<>();
-            lore.add("§7Clique aqui para resgatar os prêmios");
-            lore.add("§7do seu §fDia de número " + proximoDia + "§7!");
-            lore.add("§7Sequência acumulada: §b" + streakAtual + " dias");
-            itemCentral = criarItemComLore(Material.LIME_STAINED_GLASS_PANE, "§a§l¡Clique para Resgatar!", lore);
+            lore.add("§7");
+            lore.add("§aClique para ativar o bônus!");
+            lore.add("§fPrêmio: §aDia " + proximoDia);
+            lore.add("§7");
+            itemCentral = criarItemComLore(Material.LIME_DYE, "§a§lDesbloquear Recompensa", lore);
         }
 
-        inv.setItem(4, itemCentral);
+        inv.setItem(31, itemCentral);
         p.openInventory(inv);
     }
 
@@ -213,13 +245,15 @@ public class Checkin extends JavaPlugin implements CommandExecutor, Listener {
             e.setCancelled(true); 
 
             ItemStack itemClicado = e.getCurrentItem();
-            if (itemClicado == null || itemClicado.getType() != Material.LIME_STAINED_GLASS_PANE) {
-                if (itemClicado != null && itemClicado.getType() == Material.RED_STAINED_GLASS_PANE) {
-                    Player p = (Player) e.getWhoClicked();
-                    p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
-                }
+            if (itemClicado == null) return;
+
+            if (itemClicado.getType() == Material.RED_DYE || itemClicado.getType() == Material.YELLOW_DYE) {
+                Player p = (Player) e.getWhoClicked();
+                p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
                 return;
             }
+
+            if (itemClicado.getType() != Material.LIME_DYE) return;
 
             Player p = (Player) e.getWhoClicked();
             String uuid = p.getUniqueId().toString();
@@ -227,7 +261,7 @@ public class Checkin extends JavaPlugin implements CommandExecutor, Listener {
 
             conectarBancoDados();
             if (conn == null) {
-                p.sendMessage("§cErro de conexão.");
+                p.sendMessage("§cTerminal offline.");
                 return;
             }
 
@@ -260,8 +294,8 @@ public class Checkin extends JavaPlugin implements CommandExecutor, Listener {
 
                 p.closeInventory();
                 p.sendMessage(" ");
-                p.sendMessage("§a§l[Check-in] §fParabéns! Você resgatou a recompensa do §e§lDia " + novoDia + "§f!");
-                p.sendMessage("§a§l[Check-in] §7Sua sequência subiu para §b" + novoDia + " dias§7.");
+                p.sendMessage("§5§l[Terminal] §fRecompensa do §d§lDia " + novoDia + " §fativada com sucesso!");
+                p.sendMessage("§5§l[Terminal] §fOfensiva atualizada: §d" + novoDia + " dias§f.");
                 p.sendMessage(" ");
                 
                 p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
