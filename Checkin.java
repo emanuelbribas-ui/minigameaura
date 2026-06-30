@@ -2,6 +2,8 @@ package com.serpens.checkin;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.Sound;
+import org.bukkit.Statistic;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -9,6 +11,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
@@ -17,124 +20,214 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
+import java.io.IOException;
 import java.sql.*;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Checkin extends JavaPlugin implements CommandExecutor, Listener {
+
     private Connection conn;
-    private File pasta;
+    private File pastaPlugin;
     private FileConfiguration config;
+    private final String tituloMenu = "§8Check-in Diário";
 
     @Override
     public void onEnable() {
-        getLogger().info("A iniciar MinigameAura Check-in...");
         try {
-            pasta = new File(getServer().getWorldContainer(), "minigameaura");
-            if (!pasta.exists()) pasta.mkdirs();
+            pastaPlugin = new File(getServer().getWorldContainer(), "minigameaura");
+            if (!pastaPlugin.exists()) {
+                pastaPlugin.mkdirs();
+            }
 
-            File configFile = new File(pasta, "config.yml");
+            File configFile = new File(pastaPlugin, "config.yml");
             if (!configFile.exists()) {
-                configFile.createNewFile();
+                try {
+                    configFile.createNewFile();
+                } catch (IOException e) {
+                    getLogger().severe("Erro ao gerar config.yml");
+                }
             }
             config = YamlConfiguration.loadConfiguration(configFile);
+            carregarConfigPadrao();
 
-            conectarBanco();
-        } catch (Throwable e) {
-            getLogger().severe("Erro critico ao carregar ficheiros!");
-            e.printStackTrace();
+            conectarBancoDados();
+
+        } catch (Throwable t) {
+            t.printStackTrace();
         }
-        
+
         if (this.getCommand("checkin") != null) {
             this.getCommand("checkin").setExecutor(this);
+        }
+        if (this.getCommand("casaldoano") != null) {
+            this.getCommand("casaldoano").setExecutor(this);
         }
         getServer().getPluginManager().registerEvents(this, this);
     }
 
-    private void conectarBanco() {
+    private void carregarConfigPadrao() {
+        if (!config.contains("dia_1")) {
+            config.set("dia_1", "apple 5");
+            config.set("dia_2", "cooked_beef 16");
+            config.set("dia_3", "coal 10");
+            config.set("dia_31", "netherite_block 1");
+            try {
+                config.save(new File(pastaPlugin, "config.yml"));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void conectarBancoDados() {
         try {
-            if (conn != null && !conn.isClosed()) return;
-            
-            File dbFile = new File(pasta, "database.sqlite");
+            if (conn != null && !conn.isClosed()) {
+                return;
+            }
+
+            File dbFile = new File(pastaPlugin, "database.sqlite");
             Class.forName("org.sqlite.JDBC");
             conn = DriverManager.getConnection("jdbc:sqlite:" + dbFile.getAbsolutePath());
-            
+
             try (Statement st = conn.createStatement()) {
-                st.execute("CREATE TABLE IF NOT EXISTS checkins (uuid VARCHAR(36) PRIMARY KEY, data VARCHAR(10), streak INTEGER)");
+                st.execute("CREATE TABLE IF NOT EXISTS checkins (" +
+                        "uuid VARCHAR(36) PRIMARY KEY, " +
+                        "data VARCHAR(10), " +
+                        "streak INTEGER" +
+                        ")");
             }
-        } catch (Throwable e) {
-            getLogger().severe("Falha ao ligar ao banco SQLite! O driver pode estar em falta.");
-            e.printStackTrace();
+        } catch (Throwable t) {
+            t.printStackTrace();
         }
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (sender instanceof Player) {
+        if (command.getName().equalsIgnoreCase("casaldoano")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("§cApenas jogadores podem ver o casal do ano!");
+                return true;
+            }
+
             Player p = (Player) sender;
-            abrirGUI(p);
+            
+            p.sendTitle("§d§lMysthic + Ana Livia", "§c❤ Casal do Ano ❤", 10, 60, 10);
+            p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.5f);
+
+            p.sendMessage(" ");
+            p.sendMessage("§d       ████▄   ████▄");
+            p.sendMessage("§d      ███████ ███████");
+            p.sendMessage("§d      ███████████████");
+            p.sendMessage("§c        ███████████");
+            p.sendMessage("§c          ███████");
+            p.sendMessage("§c            ███");
+            p.sendMessage("§c             █");
+            p.sendMessage(" ");
+            p.sendMessage("§a§l[Aura] §d§lMysthic §7e §d§lAna Livia §cforam coroados o casal do ano! ❤");
+            p.sendMessage(" ");
+            return true;
         }
-        return true;
+
+        if (command.getName().equalsIgnoreCase("checkin")) {
+            if (sender instanceof Player) {
+                Player p = (Player) sender;
+                abrirMenuCheckin(p);
+            } else {
+                sender.sendMessage("§cApenas jogadores podem executar o /checkin");
+            }
+            return true;
+        }
+
+        return false;
     }
 
-    private void abrirGUI(Player p) {
-        Inventory inv = Bukkit.createInventory(null, 9, "check-in");
-        
-        int segundosJogados = 300; 
-        try {
-            segundosJogados = p.getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE) / 20; 
-        } catch (Throwable ex) {
-            // Ignora silenciosamente se o servidor não suportar
+    private void abrirMenuCheckin(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 9, tituloMenu);
+
+        ItemStack background = criarItem(Material.GRAY_STAINED_GLASS_PANE, "§7 ");
+        for (int i = 0; i < inv.getSize(); i++) {
+            inv.setItem(i, background);
         }
-        
-        conectarBanco(); 
-        
-        boolean pegou = false;
+
+        int segundosJogados = 300;
+        try {
+            segundosJogados = p.getStatistic(Statistic.PLAY_ONE_MINUTE) / 20;
+        } catch (Throwable t) {
+        }
+
+        conectarBancoDados();
+
+        boolean jaResgatouHoje = false;
+        int streakAtual = 0;
+
         if (conn != null) {
-            try (PreparedStatement ps = conn.prepareStatement("SELECT data FROM checkins WHERE uuid = ?")) {
+            try (PreparedStatement ps = conn.prepareStatement("SELECT data, streak FROM checkins WHERE uuid = ?")) {
                 ps.setString(1, p.getUniqueId().toString());
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
-                        String data = rs.getString("data");
-                        pegou = (data != null && data.equals(LocalDate.now().toString()));
+                        String ultimaData = rs.getString("data");
+                        streakAtual = rs.getInt("streak");
+                        jaResgatouHoje = (ultimaData != null && ultimaData.equals(LocalDate.now().toString()));
                     }
                 }
-            } catch (Throwable e) { 
-                e.printStackTrace(); 
-                p.sendMessage("§cErro interno ao verificar o banco de dados.");
+            } catch (Throwable t) {
+                t.printStackTrace();
             }
         } else {
-            p.sendMessage("§cO banco de dados está offline. Tenta novamente mais tarde.");
+            p.sendMessage("§cO sistema de armazenamento está offline.");
             return;
         }
 
-        ItemStack item;
+        ItemStack itemCentral;
+        int proximoDia = streakAtual + 1;
+        if (proximoDia > 31) proximoDia = 1;
+
         if (segundosJogados < 300) {
-            item = criarItem(Material.RED_STAINED_GLASS_PANE, "§cEspera 5 minutos no servidor para resgatar");
-        } else if (pegou) {
-            item = criarItem(Material.YELLOW_STAINED_GLASS_PANE, "§eJá resgataste a tua recompensa hoje");
+            List<String> lore = new ArrayList<>();
+            lore.add("§7Você precisa jogar no mínimo §f5 minutos§7.");
+            lore.add("§7Tempo atual: §e" + (segundosJogados / 60) + "m " + (segundosJogados % 60) + "s");
+            itemCentral = criarItemComLore(Material.RED_STAINED_GLASS_PANE, "§c§lCheck-in Bloqueado", lore);
+        } else if (jaResgatouHoje) {
+            List<String> lore = new ArrayList<>();
+            lore.add("§7Você já garantiu seu prêmio diário.");
+            lore.add("§7Sua sequência atual: §b" + streakAtual + " dias");
+            lore.add("§7Retorne amanhã para o §adinha " + proximoDia + "§7!");
+            itemCentral = criarItemComLore(Material.YELLOW_STAINED_GLASS_PANE, "§e§lRecompensa Já Resgatada", lore);
         } else {
-            item = criarItem(Material.LIME_STAINED_GLASS_PANE, "§aClica para sacar a recompensa!");
+            List<String> lore = new ArrayList<>();
+            lore.add("§7Clique aqui para resgatar os prêmios");
+            lore.add("§7do seu §fDia de número " + proximoDia + "§7!");
+            lore.add("§7Sequência acumulada: §b" + streakAtual + " dias");
+            itemCentral = criarItemComLore(Material.LIME_STAINED_GLASS_PANE, "§a§l¡Clique para Resgatar!", lore);
         }
 
-        inv.setItem(4, item);
+        inv.setItem(4, itemCentral);
         p.openInventory(inv);
     }
 
-    @EventHandler
-    public void aoClicar(InventoryClickEvent e) {
-        if (e.getView().getTitle().equals("check-in")) {
-            e.setCancelled(true);
-            if (e.getCurrentItem() == null || e.getCurrentItem().getType() != Material.LIME_STAINED_GLASS_PANE) {
+    @EventHandler(priority = EventPriority.HIGH)
+    public void aoClicarNoInventario(InventoryClickEvent e) {
+        if (e.getView().getTitle().equals(tituloMenu)) {
+            e.setCancelled(true); 
+
+            ItemStack itemClicado = e.getCurrentItem();
+            if (itemClicado == null || itemClicado.getType() != Material.LIME_STAINED_GLASS_PANE) {
+                if (itemClicado != null && itemClicado.getType() == Material.RED_STAINED_GLASS_PANE) {
+                    Player p = (Player) e.getWhoClicked();
+                    p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
+                }
                 return;
             }
 
             Player p = (Player) e.getWhoClicked();
             String uuid = p.getUniqueId().toString();
-            int streak = 0;
+            int streakAtual = 0;
 
-            conectarBanco();
+            conectarBancoDados();
             if (conn == null) {
-                p.sendMessage("§cErro de ligação ao banco de dados!");
+                p.sendMessage("§cErro de conexão.");
                 return;
             }
 
@@ -143,19 +236,17 @@ public class Checkin extends JavaPlugin implements CommandExecutor, Listener {
                     ps.setString(1, uuid);
                     try (ResultSet rs = ps.executeQuery()) {
                         if (rs.next()) {
-                            streak = rs.getInt("streak");
+                            streakAtual = rs.getInt("streak");
                         }
                     }
                 }
 
-                int proximoDia = streak + 1;
-                if (proximoDia > 31) proximoDia = 1;
+                int novoDia = streakAtual + 1;
+                if (novoDia > 31) novoDia = 1;
 
-                String recompensa = config.getString("dia_" + proximoDia);
-                if (recompensa != null && !recompensa.isEmpty()) {
-                    Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "give " + p.getName() + " " + recompensa);
-                } else {
-                    p.sendMessage("§cRecompensa não configurada para o dia " + proximoDia);
+                String comandoRecompensa = config.getString("dia_" + novoDia);
+                if (comandoRecompensa != null && !comandoRecompensa.isEmpty()) {
+                    Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "give " + p.getName() + " " + comandoRecompensa);
                 }
 
                 try (PreparedStatement upsert = conn.prepareStatement(
@@ -163,16 +254,20 @@ public class Checkin extends JavaPlugin implements CommandExecutor, Listener {
                 )) {
                     upsert.setString(1, uuid);
                     upsert.setString(2, LocalDate.now().toString());
-                    upsert.setInt(3, proximoDia);
+                    upsert.setInt(3, novoDia);
                     upsert.executeUpdate();
                 }
 
                 p.closeInventory();
-                p.sendMessage("§aRecompensa do dia " + proximoDia + " resgatada com sucesso!");
+                p.sendMessage(" ");
+                p.sendMessage("§a§l[Check-in] §fParabéns! Você resgatou a recompensa do §e§lDia " + novoDia + "§f!");
+                p.sendMessage("§a§l[Check-in] §7Sua sequência subiu para §b" + novoDia + " dias§7.");
+                p.sendMessage(" ");
+                
+                p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
 
-            } catch (Throwable ex) {
-                ex.printStackTrace();
-                p.sendMessage("§cOcorreu um erro ao resgatar a recompensa.");
+            } catch (Throwable t) {
+                t.printStackTrace();
             }
         }
     }
@@ -187,8 +282,25 @@ public class Checkin extends JavaPlugin implements CommandExecutor, Listener {
         return item;
     }
 
+    private ItemStack criarItemComLore(Material mat, String nome, List<String> lore) {
+        ItemStack item = new ItemStack(mat);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(nome);
+            meta.setLore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
     @Override
     public void onDisable() {
-        try { if (conn != null && !conn.isClosed()) conn.close(); } catch (Throwable e) { e.printStackTrace(); }
+        try {
+            if (conn != null && !conn.isClosed()) {
+                conn.close();
+            }
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
     }
 }
