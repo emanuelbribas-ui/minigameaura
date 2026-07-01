@@ -62,9 +62,6 @@ public class Checkin extends JavaPlugin implements CommandExecutor, Listener {
         if (this.getCommand("checkin") != null) {
             this.getCommand("checkin").setExecutor(this);
         }
-        if (this.getCommand("casaldoano") != null) {
-            this.getCommand("casaldoano").setExecutor(this);
-        }
         getServer().getPluginManager().registerEvents(this, this);
     }
 
@@ -104,31 +101,6 @@ public class Checkin extends JavaPlugin implements CommandExecutor, Listener {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (command.getName().equalsIgnoreCase("casaldoano")) {
-            if (!(sender instanceof Player)) {
-                sender.sendMessage("§cApenas jogadores podem ver o casal do ano!");
-                return true;
-            }
-
-            Player p = (Player) sender;
-            
-            p.sendTitle("§d§lMysthic + Ana Livia", "§c❤ Casal do Ano ❤", 10, 60, 10);
-            p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.5f);
-
-            p.sendMessage(" ");
-            p.sendMessage("§d       ████▄   ████▄");
-            p.sendMessage("§d      ███████ ███████");
-            p.sendMessage("§d      ███████████████");
-            p.sendMessage("§c        ███████████");
-            p.sendMessage("§c          ███████");
-            p.sendMessage("§c            ███");
-            p.sendMessage("§c             █");
-            p.sendMessage(" ");
-            p.sendMessage("§a§l[Aura] §d§lMysthic §7e §d§lAna Livia §cforam coroados o casal do ano! ❤");
-            p.sendMessage(" ");
-            return true;
-        }
-
         if (command.getName().equalsIgnoreCase("checkin")) {
             if (sender instanceof Player) {
                 Player p = (Player) sender;
@@ -138,7 +110,6 @@ public class Checkin extends JavaPlugin implements CommandExecutor, Listener {
             }
             return true;
         }
-
         return false;
     }
 
