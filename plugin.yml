@@ -1,5 +1,5 @@
 name: MinigameAura
-version: 2.0.0
+version: 2.0.1
 author: CM_FX
 main: com.serpens.checkin.Checkin
 api-version: "1.21"
@@ -7,9 +7,6 @@ libraries:
   - org.xerial:sqlite-jdbc:3.46.0.0
 commands:
   checkin:
-    description: Abre o terminal luxuoso de check-in diário.
+    description: abre o check-in diario
     usage: /checkin
     aliases: [diario, check]
-  casaldoano:
-    description: Use pra descobrir pra que serve muehuehue
-    usage: /casaldoano
